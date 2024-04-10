@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "MyProjectCharacter.h"
+
+#include "BlueprintEditor.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -11,6 +13,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "PropertyPathHelpers.h"
+#include "Channels/MovieSceneChannelTraits.h"
 #include "Weapons/WeaponBase.h"
 #include "Net/UnrealNetwork.h"
 
@@ -66,6 +69,7 @@ void AMyProjectCharacter::BeginPlay()
 	Super::BeginPlay();
 	HealthComponent->OnHealthChanged.AddDynamic(this, &AMyProjectCharacter::OnHealthChange);
 	DefaultFOV = FollowCamera->FieldOfView;
+	bIsSprinting = false;
 
 	//Spawn a default weapon
 	if(GetLocalRole() == ROLE_Authority)
@@ -139,6 +143,13 @@ void AMyProjectCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 
 		// Reloading
 		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Triggered, this, &AMyProjectCharacter::Reloading);
+
+		// First Weapon
+		EnhancedInputComponent->BindAction(FirstWeaponAction, ETriggerEvent::Triggered, this, &AMyProjectCharacter::FirstWeapon);
+
+		// Second Weapon
+		EnhancedInputComponent->BindAction(SecondWeaponAction, ETriggerEvent::Triggered, this, &AMyProjectCharacter::SecondWeapon);
+		
 	}
 	else
 	{
@@ -151,11 +162,7 @@ void AMyProjectCharacter::OnHealthChange(UHealthComponent* HealthComp, float Hea
 	if(Health <= 0.0f && !bDied)
 	{
 		bDied = true;
-		GetMovementComponent()->StopMovementImmediately();
-		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		GetMesh()->SetSimulatePhysics(true);
-		DetachFromControllerPendingDestroy();
-		SetLifeSpan(10.0f);
+		Dying();
 	}
 }
 
@@ -241,9 +248,65 @@ void AMyProjectCharacter::Reloading()
 	}
 }
 
+void AMyProjectCharacter::Dying()
+{
+	GetMovementComponent()->StopMovementImmediately();
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetMesh()->SetSimulatePhysics(true);
+	DetachFromControllerPendingDestroy();
+	SetLifeSpan(10.0f);
+}
+
+void AMyProjectCharacter::FirstWeapon()
+{
+	if(CurrentWeapon)
+	{
+		AWeaponBase* OldWeapon = CurrentWeapon;
+
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(WeaponArray[0], FVector::ZeroVector, FRotator::ZeroRotator, SpawnParameters);
+		if(CurrentWeapon)
+		{
+			CurrentWeapon->SetOwner(this);
+			CurrentWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, "WeaponSocket");
+			OldWeapon->Destroy();
+		}
+	}
+}
+
+void AMyProjectCharacter::SecondWeapon()
+{
+	if(CurrentWeapon)
+	{
+		AWeaponBase* OldWeapon = CurrentWeapon;
+
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(WeaponArray[1], FVector::ZeroVector, FRotator::ZeroRotator, SpawnParameters);
+		if(CurrentWeapon)
+		{
+			CurrentWeapon->SetOwner(this);
+			CurrentWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, "WeaponSocket");
+			OldWeapon->Destroy();
+		}
+	}
+}
+
 void AMyProjectCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(AMyProjectCharacter, CurrentWeapon);
+	DOREPLIFETIME(AMyProjectCharacter, bDied);
+}
+
+void AMyProjectCharacter::ServerDying_Implementation()
+{
+	Dying();
+}
+
+bool AMyProjectCharacter::ServerDying_Validate()
+{
+	return true;
 }

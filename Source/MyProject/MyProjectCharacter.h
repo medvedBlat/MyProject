@@ -13,7 +13,6 @@ class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
 
-
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 
 UCLASS(config=Game)
@@ -61,6 +60,17 @@ class AMyProjectCharacter : public ACharacter
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputAction* ReloadAction;
 
+	/** First Weapon Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* FirstWeaponAction;
+
+	/** Second Weapon Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* SecondWeaponAction;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Player")
+	TArray<TSubclassOf<AWeaponBase>> WeaponArray;
+	
 	UPROPERTY(Replicated, VisibleDefaultsOnly, BlueprintReadWrite, Category = "Weapon", meta = (AllowPrivateAccess = "true"))
 	AWeaponBase* CurrentWeapon;
 
@@ -79,20 +89,25 @@ class AMyProjectCharacter : public ACharacter
 	float DefaultFOV;
 	
 	bool bWantsToZoom;
+	
+	int32 CurWeaponIt{0};
 
 public:
 	AMyProjectCharacter();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bIsSprinting{false};
+	bool bIsSprinting;
 	
-	UPROPERTY(BlueprintReadOnly, Category = "Player")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player")
 	bool bDied;
 
 protected:
 
 	UFUNCTION()
 	void OnHealthChange(UHealthComponent* HealthComp, float Health, float HealthDelta, const class UDamageType* DamageType, class AController* InstigatedBy, AActor* DamageCauser);
+
+	UFUNCTION(Reliable, Server, WithValidation)
+	void ServerDying();
 	
 	/** Called for movement input */
 	void Move(const FInputActionValue& Value);
@@ -114,6 +129,12 @@ protected:
 
 	void Reloading();
 
+	void Dying();
+
+	void FirstWeapon();
+
+	void SecondWeapon();
+	
 	// To add mapping context
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	

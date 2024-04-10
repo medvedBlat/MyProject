@@ -9,6 +9,16 @@
 class USkeletalMeshComponent;
 class UDamageType;
 
+//Information of a single hitscan weapon linetrace
+USTRUCT()
+struct FHitScanTrace
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FVector_NetQuantize TraceTo;
+};
+
 UCLASS()
 class MYPROJECT_API AWeaponBase : public AActor
 {
@@ -53,6 +63,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
 	int32 Capacity;
 
+	UPROPERTY(ReplicatedUsing=OnRep_HitScanTrace)
+	FHitScanTrace HitScanTrace;
+
 	bool bCanFire;
 	
 	FTimerHandle TimerHandle_TimeBetweenShots;
@@ -66,8 +79,16 @@ protected:
 
 	UFUNCTION(Reliable, Server, WithValidation)
 	void ServerFire();
+
+	//Playing FX
+	UFUNCTION()
+	void OnRep_HitScanTrace();
 	
 	virtual void Fire();
+
+	void PlayFireEffect(FVector TraceEnd);
+
+	void PlayImpactEffect(FVector ImpactPoint);
 
 public:	
 

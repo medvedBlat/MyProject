@@ -7,6 +7,7 @@
 #include "../Weapons/WeaponBase.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 
 
 // Sets default values
@@ -17,10 +18,13 @@ AWeaponBase::AWeaponBase()
 	BaseDamage = 20.0f;
 	MuzzleSocket = "MuzzleFlash";
 	FireRate = 600;
-	MaxMagCapacity = 30;
+	MaxMagCapacity = 0;
 	bCanFire = true;
 
 	SetReplicates(true);
+
+	NetUpdateFrequency = 66.0f;
+	MinNetUpdateFrequency = 33.0f;
 }
 
 // Called when the game starts or when spawned
@@ -52,6 +56,8 @@ void AWeaponBase::Fire()
 		QueryParams.AddIgnoredActor(this);
 		QueryParams.bTraceComplex = true;
 
+		FVector TraceEndPoint = TraceEnd;
+
 		FHitResult Hit;
 		if (GetWorld()->LineTraceSingleByChannel(Hit, EyeLocation, TraceEnd, ECC_Visibility, QueryParams))
 		{
@@ -59,17 +65,19 @@ void AWeaponBase::Fire()
 
 			UGameplayStatics::ApplyPointDamage(HitActor, BaseDamage, ShotDirection, Hit, MyOwner->GetInstigatorController(), this, DamageType);
 
-			if(MuzzleEffect)
-			{
-				UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), ImpactEffect, Hit.ImpactPoint, Hit.ImpactNormal.Rotation());
-			}
+			PlayImpactEffect(Hit.ImpactPoint);
+
+			TraceEndPoint = Hit.ImpactPoint;
 		}
 		//DrawDebugLine(GetWorld(), EyeLocation, TraceEnd, FColor::White, false,1.0f, 0, 1.0f);
 
-		if(MuzzleEffect)
+		PlayFireEffect(TraceEndPoint);
+
+		if(GetLocalRole() == ROLE_Authority)
 		{
-			UGameplayStatics::SpawnEmitterAttached(MuzzleEffect, WeaponMesh, MuzzleSocket);
+			HitScanTrace.TraceTo = TraceEndPoint;
 		}
+		
 		LastTimeFired = GetWorld()->TimeSeconds;
 
 		if(FireSound)
@@ -116,4 +124,37 @@ void AWeaponBase::ServerFire_Implementation()
 bool AWeaponBase::ServerFire_Validate()
 {
 	return true;
+}
+
+void AWeaponBase::OnRep_HitScanTrace()
+{
+	PlayFireEffect(HitScanTrace.TraceTo);
+	PlayImpactEffect(HitScanTrace.TraceTo);
+}
+
+void AWeaponBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	
+	DOREPLIFETIME_CONDITION(AWeaponBase, HitScanTrace, COND_SkipOwner);
+}
+
+void AWeaponBase::PlayFireEffect(FVector TraceEnd)
+{
+	if(MuzzleEffect)
+	{
+		UGameplayStatics::SpawnEmitterAttached(MuzzleEffect, WeaponMesh, MuzzleSocket);
+	}
+}
+
+void AWeaponBase::PlayImpactEffect(FVector ImpactPoint)
+{
+	if(ImpactEffect)
+	{
+		FVector MuzzleSocketLocation = WeaponMesh->GetSocketLocation(MuzzleSocket);
+		FVector ShotDirection = ImpactPoint - MuzzleSocketLocation;
+		ShotDirection.Normalize();
+		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), ImpactEffect, ImpactPoint, ShotDirection.Rotation());
+	}
+
 }
